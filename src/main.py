@@ -24,8 +24,7 @@ def main(argv):
         reduction mode, apply noise reduction to all specified
         files.""")
     p.add_argument("files", metavar="FILE", type=str, nargs="+",
-                   help="""audio files to process (stdin if none
-                   specified)""")
+                   help="audio files to process")
     p.add_argument("-d", "--denoise", action="store_true",
                    help="noise reduction mode")
     p.add_argument("-s", "--noise-sample", metavar="SAMPLE", nargs=1,
