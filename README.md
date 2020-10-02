@@ -2,9 +2,9 @@
 
 Задачи: https://github.com/moevm/mse_search_for_audio_replays/projects
 
-## Инструкции по запуску
+## Инструкция по запуску
 
-Основной скрипт -- src/main.py. Для получения справки, запустите его с
+Основной скрипт — src/main.py. Для получения справки, запустите его с
 ключом `--help`:
 ```sh
 src/main.py --help
