@@ -27,7 +27,7 @@ def main(argv):
                    help="audio files to process")
     p.add_argument("-d", "--denoise", action="store_true",
                    help="noise reduction mode")
-    p.add_argument("-s", "--noise-sample", metavar="SAMPLE", nargs=1,
+    p.add_argument("-s", "--noise-sample", metavar="SAMPLE",
                    help="noise sample (required with --denoise)")
     p.add_argument("-V", "--version", action="version", version="0.0.1")
     args = p.parse_args()
