@@ -18,4 +18,4 @@ src/main.py --help
 Пока что вместо обоих режимов работы поставлены заглушки, которые
 выводят режим и набор переданных имён файлов.
 
-Архив содержащий видео с примерами работы интерфейса программы: [скачать ZIP](https://github.com/moevm/mse_search_for_audio_replays/files/5323273/screen_cast.zip)
+Архив, содержащий видео с примерами работы интерфейса программы: [скачать ZIP](https://github.com/moevm/mse_search_for_audio_replays/files/5323273/screen_cast.zip)
