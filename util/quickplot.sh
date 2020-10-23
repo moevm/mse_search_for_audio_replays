@@ -1,6 +1,11 @@
 #!/bin/sh
 
-f=${1:-'-'}
+if [ "$#" -lt 1 ]
+then
+    echo "usage: $0 filaname" >&2
+    exit 1
+fi
+f="$1"
 
 gnuplot <<EOF
 set xlabel 'time, sec'
