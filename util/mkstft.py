@@ -46,7 +46,9 @@ def main():
     prinf(f"max: {np.amax(data)}")
     prinf(f"min: {np.amin(data)}")
 
-    mono = np.mean(data, axis=0) if data.shape[0] > 1 else data[0]
+    mono = (np.mean(data, axis=0)
+            if data.shape[0] > 1
+            else np.asarray(data[0], np.float32))
 
     prinf(f"mono shape: {mono.shape}")
 
