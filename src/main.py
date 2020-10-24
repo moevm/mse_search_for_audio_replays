@@ -27,12 +27,19 @@ def noise_spec(noise_data):
     av = np.mean(np.abs(tf), axis=1)
     mx = np.amax(av)
     norm = av / mx
-    return norm**2
+    return av * 4, norm
 
-def reduce_noise(data, noise):
+def reduce_noise(data, noise2):
+    nabs, noise = noise2
     length = data.shape[0]
     tf = librosa.stft(data).T
-    dest = tf * (1 - noise)
+    dest = np.array([
+        [
+            fa * (1 - an) if np.abs(fa) > na else 0
+            for na, an, fa in zip(nabs, noise, frame)
+        ]
+        for i, frame in enumerate(tf)
+    ])
     return librosa.istft(dest.T, length=length)
 
 def export_audio(fname, data, rate):
