@@ -9,6 +9,7 @@ from pydub import AudioSegment
 import librosa
 import soundfile
 
+
 # -> np.array (mono audio data), int (sampling rate)
 def load_audio(fname):
     af = AudioSegment.from_file(fname)
@@ -22,9 +23,11 @@ def load_audio(fname):
 
     return data, rate
 
+
 def noise_spec(noise_data):
     tf = librosa.stft(noise_data)
     return np.amax(np.abs(tf), axis=1)
+
 
 def reduce_noise(data, noise):
     length = data.shape[0]
@@ -38,15 +41,20 @@ def reduce_noise(data, noise):
     ])
     return librosa.istft(dest.T, length=length)
 
-def export_audio(fname, data, rate):
-    soundfile.write(fname, np.asarray(data, np.int16), rate)
 
-
+def export_audio(fname, data, rate):
+    try:
+        soundfile.write(fname, np.asarray(data, np.int16), rate)
+    except TypeError:
+        fname = fname[:fname.rfind(".", 0, len(fname)) + 1] + ".wav"
+        soundfile.write(fname, np.asarray(data, np.int16), rate)
+
 
 def detect_reps(fnames):
     print("Requested repetitions detection for files: {}".format(
         ", ".join(fnames)))
     print("(not implemented yet)")
+
 
 def denoise(sample_fname, backup_suffix, fnames):
     if sample_fname is None:
@@ -60,11 +68,17 @@ def denoise(sample_fname, backup_suffix, fnames):
     for fname in fnames:
         src_data, src_rate = load_audio(fname)
         res_data = reduce_noise(src_data, noise)
+        format_dot_place = fname.rfind(".", 0, len(fname))
+        format_line = fname[format_dot_place + 1:] if (len(fname) > format_dot_place + 1) else ""
         if backup_suffix:
-            os.rename(fname, fname + backup_suffix)
+            if format_dot_place == -1:
+                os.rename(fname, fname + backup_suffix)
+            else:
+                os.rename(fname, fname[:format_dot_place] + backup_suffix + '.' + format_line)
         export_audio(fname, res_data, src_rate)
 
     return 0
+
 
 def main(argv):
     p = argparse.ArgumentParser(
@@ -88,6 +102,8 @@ def main(argv):
     else:
         return detect_reps(args.files)
 
+
 if __name__ == "__main__":
     from sys import argv
+
     exit(main(argv) or 0)
