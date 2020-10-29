@@ -46,7 +46,7 @@ def export_audio(fname, data, rate):
     try:
         soundfile.write(fname, np.asarray(data, np.int16), rate)
     except TypeError:
-        fname = fname[:fname.rfind(".", 0, len(fname)) + 1] + ".wav"
+        fname = fname[:fname.rfind(".", 0, len(fname)) + 1] + "wav"
         soundfile.write(fname, np.asarray(data, np.int16), rate)
 
 
