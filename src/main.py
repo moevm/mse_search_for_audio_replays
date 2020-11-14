@@ -5,6 +5,7 @@ from sys import stderr
 import os
 
 import numpy as np
+from progressbar import ProgressBar, Percentage, Bar, ETA
 from pydub import AudioSegment
 import librosa
 import soundfile
@@ -12,6 +13,7 @@ import soundfile
 
 # -> np.array (mono audio data), int (sampling rate)
 def load_audio(fname):
+    print("Loading file {}...".format(fname), end="")
     af = AudioSegment.from_file(fname)
     data = np.array([chan.get_array_of_samples()
                      for chan in af.split_to_mono()])
@@ -21,6 +23,7 @@ def load_audio(fname):
     if channels > 1:
         data = np.mean(data, axis=0)
 
+    print("OK")
     return data, rate
 
 
@@ -30,15 +33,24 @@ def noise_spec(noise_data):
 
 
 def reduce_noise(data, noise):
+    widgets = ['Test: ', Percentage(), ' ',
+               Bar(marker='#', left='[', right=']'),
+               ' ', ETA()]
+    p_bar = ProgressBar(widgets=widgets, maxval=100).start()
+    counter = 0
     length = data.shape[0]
     tf = librosa.stft(data).T
-    dest = np.array([
-        [
-            fa if np.abs(fa) > na else 0
-            for na, fa in zip(noise, frame)
-        ]
-        for frame in tf
-    ])
+    dest = None
+    for frame in tf:
+        dest = np.array([
+            [
+                fa if np.abs(fa) > na else 0
+                for na, fa in zip(noise, frame)
+            ]
+        ])
+        counter = counter + 1
+        p_bar.update(counter / len(tf) * 100)
+    p_bar.finish()
     return librosa.istft(dest.T, length=length)
 
 
@@ -66,7 +78,12 @@ def denoise(sample_fname, backup_suffix, fnames):
     noise = noise_spec(samp_data)
 
     for fname in fnames:
-        src_data, src_rate = load_audio(fname)
+        try:
+            src_data, src_rate = load_audio(fname)
+        except FileNotFoundError:
+            print("Error File {} not found!".format(fname), file=stderr)
+            continue
+        print("Reducing noise from {}".format(fname))
         res_data = reduce_noise(src_data, noise)
         format_dot_place = fname.rfind(".", 0, len(fname))
         format_line = fname[format_dot_place + 1:] if (len(fname) > format_dot_place + 1) else ""
