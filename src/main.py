@@ -9,9 +9,11 @@ from pydub import AudioSegment
 import librosa
 import soundfile
 
+from repetitions import get_repetitions
+
 
 # -> np.array (mono audio data), int (sampling rate)
-def load_audio(fname):
+def load_audio(fname, normalize=False):
     af = AudioSegment.from_file(fname)
     data = np.array([chan.get_array_of_samples()
                      for chan in af.split_to_mono()])
@@ -20,6 +22,11 @@ def load_audio(fname):
 
     if channels > 1:
         data = np.mean(data, axis=0)
+    else:
+        data = data[0]
+
+    if normalize:
+        data = data / np.amax(data)
 
     return data, rate
 
@@ -51,9 +58,27 @@ def export_audio(fname, data, rate):
 
 
 def detect_reps(fnames):
-    print("Requested repetitions detection for files: {}".format(
-        ", ".join(fnames)))
-    print("(not implemented yet)")
+    def timestr(seconds_fp):
+        seconds = round(seconds_fp)
+        seconds_only = seconds % 60
+        minutes = seconds // 60
+        minutes_only = minutes % 60
+        hours = minutes // 60
+        return "{:02d}:{:02d}:{:02d}".format(hours,
+                                             minutes_only,
+                                             seconds_only)
+
+    if len(fnames) != 1:
+        print("Cannot detect repetitions across files yet")
+        return 1
+    fname = fnames[0]
+    data, rate = load_audio(fname, normalize=True)
+
+    for t1, t2, l in get_repetitions(data, rate):
+        print("repetition: {}--{} <=> {}--{}".format(timestr(t1),
+                                                     timestr(t1+l),
+                                                     timestr(t2),
+                                                     timestr(t2+l)))
 
 
 def denoise(sample_fname, backup_suffix, fnames):

@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import math
 import numpy as np
 import sys
@@ -112,15 +110,6 @@ def filter_near(it, max_distance):
 
         return True
 
-    def result_lines(bins):
-        for b in bins:
-            bmin = min(ln[0] for ln in b)
-            emax = max(ln[0]+ln[2] for ln in b)
-            y, x, l = max(b, key=lambda ln: ln[2])
-            db = y - bmin
-            de = emax - (y + l)
-            yield y-db, x-db, l+db+de
-
     have_merges = False
     bins = []
     for line in it:
@@ -137,32 +126,13 @@ def filter_near(it, max_distance):
             nbin.extend(ch_b)
         bins.append(nbin)
 
-    # if have_merges:
-        # yield from filter_near(result_lines(bins), max_distance)
-    # else:
-    yield from result_lines(bins)
-
-
-def filter_close(it, epsilon):
-    yield from it
-    return
-
-    eps2 = epsilon * epsilon
-
-    def pt_close(x1, y1, x2, y2):
-        return (x2-x1)**2+(y2-y1)**2 < eps2
-
-    def pts_close(ln1, ln2):
-        t11, t12, l1 = ln1
-        t21, t22, l2 = ln2
-        return (pt_close(t11, t12, t21, t22)
-                and pt_close(t11+l1, t12+l1, t21+l2, t22+l2))
-
-    lines = []
-    for line in it:
-        if not any(pts_close(ln, line) for ln in lines):
-            lines.append(line)
-            yield line
+    for b in bins:
+        bmin = min(ln[0] for ln in b)
+        emax = max(ln[0]+ln[2] for ln in b)
+        y, x, l = max(b, key=lambda ln: ln[2])
+        db = y - bmin
+        de = emax - (y + l)
+        yield y-db, x-db, l+db+de
 
 
 def print_gpmatrix(mtx, times=None, file=sys.stdout):
@@ -181,54 +151,36 @@ def print_gpmatrix(mtx, times=None, file=sys.stdout):
         fprint()
 
 
-if __name__ == "__main__":
-    from pydub import AudioSegment
+def get_repetitions(data, rate,
+                    frame_length=0.05,
+                    threshold_k=3,
+                    hop_ratio=4,
+                    window_size=0.5,
+                    merge_distance_threshold=0.5,
+                    min_final_length=2,
+                    val_threshold_k=1.5,
+                    max_near_distance=0.5):
 
-    filename, s_frame_sec, s_k = sys.argv[1:]
-
-    af = AudioSegment.from_file(filename)
-    data = np.array([chan.get_array_of_samples()
-                     for chan in af.split_to_mono()])
-    rate = af.frame_rate
-    samples = lambda sec: round(sec * rate)
-
-    mono = (np.mean(data, axis=0)
-                    if data.shape[0] > 1
-            else np.asarray(data[0], np.float32))
-
-    norm = mono / np.amax(np.abs(mono))
-
-    frame_sec = float(s_frame_sec)
-    frame_sz = samples(frame_sec)
-
-    HOP_RATIO = 4
+    frame_sz = round(frame_length * rate)
 
     mtx, times = signal_windows_match_matrix_stft(
-        norm, frame_sz, rate, HOP_RATIO)
+        data, frame_sz, rate, hop_ratio)
 
-    frames = lambda sec: round(sec / frame_sec * HOP_RATIO)
+    frames = lambda sec: round(sec / frame_length * hop_ratio)
     seconds = lambda idx: times[idx]
 
-    print_gpmatrix(mtx, times)
+    # adjust the magic number together with threshold_k
+    threshold = 62.5e-6 * frame_sz * threshold_k
 
-    WIN_SEC = 0.5               # window size
-    DIST_SEC = 0.5              # merge distance
-    FILTER_LENGTH = 2           # minimal repetition length
-
-    k = float(s_k)
-    thresh = 62.5e-6 * frame_sz * k
-
-    print('#', 'time1', 'time2', 'length', file=sys.stdout)
     for mt1, mt2, mlen in \
         filter_near(
             filter_self_overlapping(
                 filter_by_length(
                     find_matches(
-                        mtx, thresh,
-                        frames(WIN_SEC),
-                        frames(DIST_SEC),
-                        thresh * 1.5),
-                    frames(FILTER_LENGTH))),
-            frames(0.5)):
-        print(seconds(mt1), seconds(mt2), seconds(mlen),
-              file=sys.stdout)
+                        mtx, threshold,
+                        frames(window_size),
+                        frames(merge_distance_threshold),
+                        threshold * val_threshold_k),
+                    frames(min_final_length))),
+            frames(max_near_distance)):
+        yield seconds(mt1), seconds(mt2), seconds(mlen)
