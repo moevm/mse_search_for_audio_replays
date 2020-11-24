@@ -41,7 +41,6 @@ def reduce_noise(data, noise):
     length = data.shape[0]
     tf = librosa.stft(data).T
     dest = []
-    i = 0
     for frame in tf:
         dest.append([fa if np.abs(fa) > na else fa * 0.1
                      for na, fa in zip(noise, frame)])
