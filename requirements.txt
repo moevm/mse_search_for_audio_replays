@@ -1,0 +1,6 @@
+numpy==1.19.4
+SoundFile==0.10.3.post1
+pydub==0.20.0
+librosa==0.8.0
+numba==0.50.0
+llvmlite==0.33.0
