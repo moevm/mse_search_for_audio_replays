@@ -126,11 +126,11 @@ def filter_near(it, max_distance):
 
     for b in bins:
         bmin = min(ln[0] for ln in b)
+        xmin = min(ln[1] for ln in b)
         emax = max(ln[0]+ln[2] for ln in b)
-        y, x, l = max(b, key=lambda ln: ln[2])
-        db = y - bmin
-        de = emax - (y + l)
-        yield y-db, x-db, l+db+de
+        x2max = max(ln[1]+ln[2] for ln in b)
+        l = min(x2max - xmin, emax - bmin)
+        yield bmin, xmin + bmin, l
 
 
 def get_repetitions(data, rate,
