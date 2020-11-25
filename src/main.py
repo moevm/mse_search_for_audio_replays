@@ -16,12 +16,15 @@ def load_audio(fname):
     print("Loading file {}...".format(fname), end="")
     af = AudioSegment.from_file(fname)
     data = np.array([chan.get_array_of_samples()
-                     for chan in af.split_to_mono()])
+                     for chan in af.split_to_mono()],
+                    dtype=np.float32)
     rate = af.frame_rate
     channels = data.shape[0]
 
     if channels > 1:
         data = np.mean(data, axis=0)
+    else:
+        data = data[0]
 
     print("OK")
     return data, rate
