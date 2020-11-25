@@ -55,8 +55,14 @@ def export_audio(fname, data, rate):
     try:
         soundfile.write(fname, np.asarray(data, np.int16), rate)
     except TypeError:
-        fname = fname[:fname.rfind(".", 0, len(fname)) + 1] + "wav"
+        File = os.path.splitext(fname)
+        fname = File[0] + ".wav"
         soundfile.write(fname, np.asarray(data, np.int16), rate)
+
+        if File[1] == ".mp3":
+            fnamemp3 = File[0] + ".mp3"
+            AudioSegment.from_wav(fname).export(fnamemp3, format="mp3")
+            os.remove(fname)
 
 
 def detect_reps(fnames):
