@@ -5,6 +5,7 @@ from sys import stderr
 import os
 
 import numpy as np
+from progressbar import ProgressBar, Percentage, Bar, ETA
 from pydub import AudioSegment
 import librosa
 import soundfile
@@ -14,9 +15,11 @@ from repetitions import get_repetitions
 
 # -> np.array (mono audio data), int (sampling rate)
 def load_audio(fname, normalize=False):
+    print("Loading file {}...".format(fname), end="")
     af = AudioSegment.from_file(fname)
     data = np.array([chan.get_array_of_samples()
-                     for chan in af.split_to_mono()])
+                     for chan in af.split_to_mono()],
+                    dtype=np.float32)
     rate = af.frame_rate
     channels = data.shape[0]
 
@@ -28,6 +31,7 @@ def load_audio(fname, normalize=False):
     if normalize:
         data = data / np.amax(data)
 
+    print("OK")
     return data, rate
 
 
@@ -37,15 +41,21 @@ def noise_spec(noise_data):
 
 
 def reduce_noise(data, noise):
+    widgets = ['Test: ', Percentage(), ' ',
+               Bar(marker='#', left='[', right=']'),
+               ' ', ETA()]
+    p_bar = ProgressBar(widgets=widgets, maxval=100).start()
+    counter = 0
     length = data.shape[0]
     tf = librosa.stft(data).T
-    dest = np.array([
-        [
-            fa if np.abs(fa) > na else 0
-            for na, fa in zip(noise, frame)
-        ]
-        for frame in tf
-    ])
+    dest = []
+    for frame in tf:
+        dest.append([fa if np.abs(fa) > na else fa * 0.1
+                     for na, fa in zip(noise, frame)])
+        counter = counter + 1
+        p_bar.update(counter / len(tf) * 100)
+    p_bar.finish()
+    dest = np.array(dest)
     return librosa.istft(dest.T, length=length)
 
 
@@ -53,8 +63,14 @@ def export_audio(fname, data, rate):
     try:
         soundfile.write(fname, np.asarray(data, np.int16), rate)
     except TypeError:
-        fname = fname[:fname.rfind(".", 0, len(fname)) + 1] + "wav"
+        File = os.path.splitext(fname)
+        fname = File[0] + ".wav"
         soundfile.write(fname, np.asarray(data, np.int16), rate)
+
+        if File[1] == ".mp3":
+            fnamemp3 = File[0] + ".mp3"
+            AudioSegment.from_wav(fname).export(fnamemp3, format="mp3")
+            os.remove(fname)
 
 
 def detect_reps(fnames):
@@ -91,7 +107,12 @@ def denoise(sample_fname, backup_suffix, fnames):
     noise = noise_spec(samp_data)
 
     for fname in fnames:
-        src_data, src_rate = load_audio(fname)
+        try:
+            src_data, src_rate = load_audio(fname)
+        except FileNotFoundError:
+            print("Error File {} not found!".format(fname), file=stderr)
+            continue
+        print("Reducing noise from {}".format(fname))
         res_data = reduce_noise(src_data, noise)
         format_dot_place = fname.rfind(".", 0, len(fname))
         format_line = fname[format_dot_place + 1:] if (len(fname) > format_dot_place + 1) else ""
