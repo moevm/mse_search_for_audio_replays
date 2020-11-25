@@ -45,7 +45,7 @@ def reduce_noise(data, noise):
     tf = librosa.stft(data).T
     dest = []
     for frame in tf:
-        dest.append([fa if np.abs(fa) > na else fa * 0.1
+        dest.append([fa if np.abs(fa) > na else 0
                      for na, fa in zip(noise, frame)])
         counter = counter + 1
         p_bar.update(counter / len(tf) * 100)
