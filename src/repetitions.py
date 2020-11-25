@@ -110,7 +110,6 @@ def filter_near(it, max_distance):
 
         return True
 
-    have_merges = False
     bins = []
     for line in it:
         ch_bs = []
@@ -118,7 +117,6 @@ def filter_near(it, max_distance):
             for l in b:
                 if lines_near(line, l):
                     ch_bs.append(b)
-                    have_merges = True
                     break
         nbin = [line]
         for ch_b in ch_bs:
@@ -133,22 +131,6 @@ def filter_near(it, max_distance):
         db = y - bmin
         de = emax - (y + l)
         yield y-db, x-db, l+db+de
-
-
-def print_gpmatrix(mtx, times=None, file=sys.stdout):
-    fprint = lambda *args, **kwargs: print(*args, file=file, **kwargs)
-    ts = times.__getitem__ if times is not None else lambda i: i
-
-    fprint(mtx.shape[1], end="")
-    for j in range(mtx.shape[1]):
-        fprint(' {}'.format(ts(j)), end="")
-    fprint()
-    for i in range(mtx.shape[0]):
-        row = mtx[i]
-        fprint(ts(i), end="")
-        for x in mtx[i]:
-            fprint(' {}'.format(x), end="")
-        fprint()
 
 
 def get_repetitions(data, rate,
