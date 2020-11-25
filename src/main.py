@@ -75,14 +75,15 @@ def export_audio(fname, data, rate):
 
 def detect_reps(fnames):
     def timestr(seconds_fp):
-        seconds = round(seconds_fp)
+        mseconds = round(seconds_fp * 1e3)
+        mseconds_only = mseconds % 1000
+        seconds = mseconds // 1000
         seconds_only = seconds % 60
         minutes = seconds // 60
         minutes_only = minutes % 60
         hours = minutes // 60
-        return "{:02d}:{:02d}:{:02d}".format(hours,
-                                             minutes_only,
-                                             seconds_only)
+        return "{:02d}:{:02d}:{:02d}.{:03d}".format(
+            hours, minutes_only, seconds_only, mseconds_only)
 
     if len(fnames) != 1:
         print("Cannot detect repetitions across files yet")
