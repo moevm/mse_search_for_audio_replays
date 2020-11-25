@@ -73,7 +73,7 @@ def export_audio(fname, data, rate):
             os.remove(fname)
 
 
-def detect_reps(fnames):
+def detect_reps(fnames, **kwargs):
     def timestr(seconds_fp):
         mseconds = round(seconds_fp * 1e3)
         mseconds_only = mseconds % 1000
@@ -91,7 +91,7 @@ def detect_reps(fnames):
     fname = fnames[0]
     data, rate = load_audio(fname, normalize=True)
 
-    for t1, t2, l in get_repetitions(data, rate):
+    for t1, t2, l in get_repetitions(data, rate, **kwargs):
         print("repetition: {}--{} <=> {}--{}".format(timestr(t1),
                                                      timestr(t1+l),
                                                      timestr(t2),
@@ -133,7 +133,14 @@ def main_denoise(args):
 
 
 def main_reps(args):
-    return detect_reps([args.file])
+    return detect_reps([args.file],
+                       frame_length=args.frame_length,
+                       threshold_k=args.threshold,
+                       window_size=args.window_length,
+                       merge_distance_threshold=args.merge_threshold,
+                       min_final_length=args.min_length,
+                       val_threshold_k=args.window_threshold,
+                       max_near_distance=args.parallel_merge_threshold)
 
 
 def main(argv):
@@ -152,6 +159,27 @@ def main(argv):
     p_reps.add_argument(
         "file", metavar="FILE", type=str,
         help="audio file to detect repetitions in")
+    p_reps.add_argument(
+        "-l", "--min-length", metavar="SEC", type=float, default=2.0,
+        help="minimal length of a repetition in seconds")
+    p_reps.add_argument(
+        "-f", "--frame-length", metavar="SEC", type=float, default=0.05,
+        help="length of STFT frame in seconds")
+    p_reps.add_argument(
+        "-t", "--threshold", metavar="K", type=float, default=3,
+        help="comparison threshold (no dimension; lower for stricter comparisons)")
+    p_reps.add_argument(
+        "--window-length", metavar="SEC", type=float, default=0.5,
+        help="length of comparison window in seconds")
+    p_reps.add_argument(
+        "--merge-threshold", metavar="SEC", type=float, default=0.5,
+        help="maximum distance between matches in seconds to merge them")
+    p_reps.add_argument(
+        "--window-threshold", metavar="K", type=float, default=1.5,
+        help="comparison threshold for whole window (no dimension; lower for stricter comparisons)")
+    p_reps.add_argument(
+        "--parallel-merge-threshold", metavar="SEC", type=float, default=0.5,
+        help="distance between similar matches' frames in seconds to merge them")
     p_reps.set_defaults(func=main_reps)
 
     p_denoise = sp.add_parser(
