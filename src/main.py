@@ -127,27 +127,55 @@ def denoise(sample_fname, backup_suffix, fnames):
     return 0
 
 
+def main_denoise(args):
+    return denoise(args.sample, args.backup_suffix,
+                   args.files)
+
+
+def main_reps(args):
+    return detect_reps([args.file])
+
+
 def main(argv):
     p = argparse.ArgumentParser(
-        description="""Detect repetitions in audio tracks. In noise
-        reduction mode, apply noise reduction to all specified
-        files.""")
-    p.add_argument("files", metavar="FILE", type=str, nargs="+",
-                   help="audio files to process")
-    p.add_argument("-d", "--denoise", action="store_true",
-                   help="noise reduction mode")
-    p.add_argument("-b", "--backup-suffix", metavar="SUFFIX",
-                   help="if set, copy source files before overwriting")
-    p.add_argument("-s", "--noise-sample", metavar="SAMPLE",
-                   help="noise sample (required with --denoise)")
-    p.add_argument("-V", "--version", action="version", version="0.0.1")
+        description='Performs noise reduction and searches for repetitions in audio files.')
+
+    p.add_argument("-V", "--version", action="version",
+                   version="0.0.1")
+
+    sp = p.add_subparsers()
+
+    p_reps = sp.add_parser(
+        "repetitions",
+        help="detect repetitions in specified file")
+
+    p_reps.add_argument(
+        "file", metavar="FILE", type=str,
+        help="audio file to detect repetitions in")
+    p_reps.set_defaults(func=main_reps)
+
+    p_denoise = sp.add_parser(
+        "denoise",
+        help="apply noise reduction to all specified files")
+
+    p_denoise.add_argument(
+        "sample", metavar="SAMPLE",
+        help="noise sample")
+    p_denoise.add_argument(
+        "files", metavar="FILE", type=str, nargs="+",
+        help="audio files to process")
+    p_denoise.add_argument(
+        "-b", "--backup-suffix", metavar="SUFFIX",
+        help="if set, copy source files before overwriting")
+    p_denoise.set_defaults(func=main_denoise)
+
     args = p.parse_args()
 
-    if args.denoise:
-        return denoise(args.noise_sample, args.backup_suffix,
-                       args.files)
-    else:
-        return detect_reps(args.files)
+    if 'func' not in args:
+        p.print_help()
+        return 1
+
+    return args.func(args)
 
 
 if __name__ == "__main__":
