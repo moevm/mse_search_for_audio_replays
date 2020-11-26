@@ -31,9 +31,7 @@ def signal_windows_match_matrix_stft(signal, wsize, rate, hop_ratio=4,
                 progress(c / total)
                 c += 1
 
-    times = [librosa.frames_to_samples(i, hop_length=hop) / rate
-             for i in range(tf.shape[0])]
-    return mtx, times
+    return mtx
 
 
 def walk_with_window(mtx, x, thresh, winlen, valthresh=math.inf,
@@ -173,12 +171,12 @@ def get_repetitions(data, rate,
 
     frame_sz = round(frame_length * rate)
 
-    mtx, times = signal_windows_match_matrix_stft(
+    mtx = signal_windows_match_matrix_stft(
         data, frame_sz, rate, hop_ratio,
         subprogress(progress, 0, 1/2))
 
     frames = lambda sec: round(sec / frame_length * hop_ratio)
-    seconds = lambda idx: times[idx]
+    seconds = lambda frame: frame * frame_length / hop_ratio
 
     # adjust the magic number together with threshold_k
     threshold = 62.5e-6 * frame_sz * threshold_k
