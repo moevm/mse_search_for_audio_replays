@@ -6,10 +6,12 @@ import os
 import math
 
 import numpy as np
-from progressbar import ProgressBar, Percentage, Bar, ETA
 from pydub import AudioSegment
 import librosa
 import soundfile
+
+from progress import simple_progressbar
+from repetitions import get_repetitions
 
 
 def next_pow2(x):
@@ -20,7 +22,7 @@ def next_pow2(x):
 
 
 # -> np.array (mono audio data), int (sampling rate)
-def load_audio(fname):
+def load_audio(fname, normalize=False):
     print("Loading file {}...".format(fname), end="")
     af = AudioSegment.from_file(fname)
     data = np.array([chan.get_array_of_samples()
@@ -33,6 +35,9 @@ def load_audio(fname):
         data = np.mean(data, axis=0)
     else:
         data = data[0]
+
+    if normalize:
+        data = data / np.amax(data)
 
     print("OK")
     return data, rate
@@ -49,13 +54,7 @@ def noise_spec(noise_data, rate, frame_length=0.05):
     return np.amax(np.abs(tf), axis=1)
 
 
-def reduce_noise(data, rate, noise, frame_length=0.05):
-    widgets = ['Test: ', Percentage(), ' ',
-               Bar(marker='#', left='[', right=']'),
-               ' ', ETA()]
-    p_bar = ProgressBar(widgets=widgets, maxval=100).start()
-    counter = 0
-
+def reduce_noise(data, rate, noise, frame_length=0.05, progress=None):
     frame_samples = round(frame_length * rate)
     n_fft = next_pow2(frame_samples)
     tf = librosa.stft(data,
@@ -89,10 +88,8 @@ def reduce_noise(data, rate, noise, frame_length=0.05):
 
         dest.append(row)
 
-        counter = counter + 1
-        p_bar.update(counter / len(tf) * 100)
-
-    p_bar.finish()
+        if progress is not None:
+            progress(len(dest) / len(tf))
 
     dest_arr = np.array(dest).T
     return librosa.istft(dest_arr,
@@ -114,10 +111,32 @@ def export_audio(fname, data, rate):
             os.remove(fname)
 
 
-def detect_reps(fnames):
-    print("Requested repetitions detection for files: {}".format(
-        ", ".join(fnames)))
-    print("(not implemented yet)")
+def detect_reps(fnames, **kwargs):
+    def timestr(seconds_fp):
+        mseconds = round(seconds_fp * 1e3)
+        mseconds_only = mseconds % 1000
+        seconds = mseconds // 1000
+        seconds_only = seconds % 60
+        minutes = seconds // 60
+        minutes_only = minutes % 60
+        hours = minutes // 60
+        return "{:02d}:{:02d}:{:02d}.{:03d}".format(
+            hours, minutes_only, seconds_only, mseconds_only)
+
+    if len(fnames) != 1:
+        print("Cannot detect repetitions across files yet")
+        return 1
+    fname = fnames[0]
+    data, rate = load_audio(fname, normalize=True)
+
+    with simple_progressbar(fname) as bar:
+        for t1, t2, l in get_repetitions(data, rate,
+                                         progress=bar.update,
+                                         **kwargs):
+            print("repetition: {}--{} <=> {}--{}".format(timestr(t1),
+                                                         timestr(t1+l),
+                                                         timestr(t2),
+                                                         timestr(t2+l)))
 
 
 def denoise(sample_fname, backup_suffix, fnames):
@@ -136,14 +155,14 @@ def denoise(sample_fname, backup_suffix, fnames):
             print("Error File {} not found!".format(fname), file=stderr)
             continue
 
-        noise = noise_tab.get(src_rate)
-        if noise is None:
-            samp = librosa.resample(samp_data, samp_rate, src_rate)
-            noise = noise_spec(samp, src_rate)
-            noise_tab[src_rate] = noise
+        with simple_progressbar(fname) as bar:
+            noise = noise_tab.get(src_rate)
+            if noise is None:
+                samp = librosa.resample(samp_data, samp_rate, src_rate)
+                noise = noise_spec(samp, src_rate)
+                noise_tab[src_rate] = noise
 
-        print("Reducing noise from {}".format(fname))
-        res_data = reduce_noise(src_data, src_rate, noise)
+            res_data = reduce_noise(src_data, src_rate, noise, progress=bar.update)
         format_dot_place = fname.rfind(".", 0, len(fname))
         format_line = fname[format_dot_place + 1:] if (len(fname) > format_dot_place + 1) else ""
         if backup_suffix:
@@ -156,27 +175,83 @@ def denoise(sample_fname, backup_suffix, fnames):
     return 0
 
 
+def main_denoise(args):
+    return denoise(args.sample, args.backup_suffix,
+                   args.files)
+
+
+def main_reps(args):
+    return detect_reps([args.file],
+                       frame_length=args.frame_length,
+                       threshold_k=args.threshold,
+                       window_size=args.window_length,
+                       merge_distance_threshold=args.merge_threshold,
+                       min_final_length=args.min_length,
+                       val_threshold_k=args.window_threshold,
+                       max_near_distance=args.parallel_merge_threshold)
+
+
 def main(argv):
     p = argparse.ArgumentParser(
-        description="""Detect repetitions in audio tracks. In noise
-        reduction mode, apply noise reduction to all specified
-        files.""")
-    p.add_argument("files", metavar="FILE", type=str, nargs="+",
-                   help="audio files to process")
-    p.add_argument("-d", "--denoise", action="store_true",
-                   help="noise reduction mode")
-    p.add_argument("-b", "--backup-suffix", metavar="SUFFIX",
-                   help="if set, copy source files before overwriting")
-    p.add_argument("-s", "--noise-sample", metavar="SAMPLE",
-                   help="noise sample (required with --denoise)")
-    p.add_argument("-V", "--version", action="version", version="0.0.1")
+        description='Performs noise reduction and searches for repetitions in audio files.')
+
+    p.add_argument("-V", "--version", action="version",
+                   version="0.0.1")
+
+    sp = p.add_subparsers()
+
+    p_reps = sp.add_parser(
+        "repetitions",
+        help="detect repetitions in specified file")
+
+    p_reps.add_argument(
+        "file", metavar="FILE", type=str,
+        help="audio file to detect repetitions in")
+    p_reps.add_argument(
+        "-l", "--min-length", metavar="SEC", type=float, default=2.0,
+        help="minimal length of a repetition in seconds")
+    p_reps.add_argument(
+        "-f", "--frame-length", metavar="SEC", type=float, default=0.05,
+        help="length of STFT frame in seconds")
+    p_reps.add_argument(
+        "-t", "--threshold", metavar="K", type=float, default=3,
+        help="comparison threshold (no dimension; lower for stricter comparisons)")
+    p_reps.add_argument(
+        "--window-length", metavar="SEC", type=float, default=0.5,
+        help="length of comparison window in seconds")
+    p_reps.add_argument(
+        "--merge-threshold", metavar="SEC", type=float, default=0.5,
+        help="maximum distance between matches in seconds to merge them")
+    p_reps.add_argument(
+        "--window-threshold", metavar="K", type=float, default=1.5,
+        help="comparison threshold for whole window (no dimension; lower for stricter comparisons)")
+    p_reps.add_argument(
+        "--parallel-merge-threshold", metavar="SEC", type=float, default=0.5,
+        help="distance between similar matches' frames in seconds to merge them")
+    p_reps.set_defaults(func=main_reps)
+
+    p_denoise = sp.add_parser(
+        "denoise",
+        help="apply noise reduction to all specified files")
+
+    p_denoise.add_argument(
+        "sample", metavar="SAMPLE",
+        help="noise sample")
+    p_denoise.add_argument(
+        "files", metavar="FILE", type=str, nargs="+",
+        help="audio files to process")
+    p_denoise.add_argument(
+        "-b", "--backup-suffix", metavar="SUFFIX",
+        help="if set, copy source files before overwriting")
+    p_denoise.set_defaults(func=main_denoise)
+
     args = p.parse_args()
 
-    if args.denoise:
-        return denoise(args.noise_sample, args.backup_suffix,
-                       args.files)
-    else:
-        return detect_reps(args.files)
+    if 'func' not in args:
+        p.print_help()
+        return 1
+
+    return args.func(args)
 
 
 if __name__ == "__main__":
