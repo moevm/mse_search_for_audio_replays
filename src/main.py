@@ -3,12 +3,20 @@
 import argparse
 from sys import stderr
 import os
+import math
 
 import numpy as np
 from progressbar import ProgressBar, Percentage, Bar, ETA
 from pydub import AudioSegment
 import librosa
 import soundfile
+
+
+def next_pow2(x):
+    p2 = 1
+    while p2 < x:
+        p2 <<= 1
+    return p2
 
 
 # -> np.array (mono audio data), int (sampling rate)
@@ -30,19 +38,29 @@ def load_audio(fname):
     return data, rate
 
 
-def noise_spec(noise_data):
-    tf = librosa.stft(noise_data)
+def noise_spec(noise_data, rate, frame_length=0.05):
+    frame_samples = round(frame_length * rate)
+    n_fft = next_pow2(frame_samples)
+
+    tf = librosa.stft(noise_data,
+                      n_fft=n_fft,
+                      win_length=frame_samples)
+
     return np.amax(np.abs(tf), axis=1)
 
 
-def reduce_noise(data, noise):
+def reduce_noise(data, rate, noise, frame_length=0.05):
     widgets = ['Test: ', Percentage(), ' ',
                Bar(marker='#', left='[', right=']'),
                ' ', ETA()]
     p_bar = ProgressBar(widgets=widgets, maxval=100).start()
     counter = 0
-    length = data.shape[0]
-    tf = librosa.stft(data).T
+
+    frame_samples = round(frame_length * rate)
+    n_fft = next_pow2(frame_samples)
+    tf = librosa.stft(data,
+                      n_fft=n_fft,
+                      win_length=frame_samples).T
     dest = []
     for frame in tf:
         dest.append([fa if np.abs(fa) > na else 0
@@ -50,8 +68,11 @@ def reduce_noise(data, noise):
         counter = counter + 1
         p_bar.update(counter / len(tf) * 100)
     p_bar.finish()
-    dest = np.array(dest)
-    return librosa.istft(dest.T, length=length)
+
+    dest_arr = np.array(dest).T
+    return librosa.istft(dest_arr,
+                         win_length=frame_samples,
+                         length=data.shape[0])
 
 
 def export_audio(fname, data, rate):
@@ -81,7 +102,7 @@ def denoise(sample_fname, backup_suffix, fnames):
         return 1
 
     samp_data, samp_rate = load_audio(sample_fname)
-    noise = noise_spec(samp_data)
+    noise_tab = {samp_rate: noise_spec(samp_data, samp_rate)}
 
     for fname in fnames:
         try:
@@ -89,8 +110,15 @@ def denoise(sample_fname, backup_suffix, fnames):
         except FileNotFoundError:
             print("Error File {} not found!".format(fname), file=stderr)
             continue
+
+        noise = noise_tab.get(src_rate)
+        if noise is None:
+            samp = librosa.resample(samp_data, samp_rate, src_rate)
+            noise = noise_spec(samp, src_rate)
+            noise_tab[src_rate] = noise
+
         print("Reducing noise from {}".format(fname))
-        res_data = reduce_noise(src_data, noise)
+        res_data = reduce_noise(src_data, src_rate, noise)
         format_dot_place = fname.rfind(".", 0, len(fname))
         format_line = fname[format_dot_place + 1:] if (len(fname) > format_dot_place + 1) else ""
         if backup_suffix:
