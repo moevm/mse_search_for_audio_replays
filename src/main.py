@@ -5,11 +5,11 @@ from sys import stderr
 import os
 
 import numpy as np
-from progressbar import ProgressBar, Percentage, Bar, ETA
 from pydub import AudioSegment
 import librosa
 import soundfile
 
+from progress import simple_progressbar
 from repetitions import get_repetitions
 
 
@@ -40,21 +40,15 @@ def noise_spec(noise_data):
     return np.amax(np.abs(tf), axis=1)
 
 
-def reduce_noise(data, noise):
-    widgets = ['Test: ', Percentage(), ' ',
-               Bar(marker='#', left='[', right=']'),
-               ' ', ETA()]
-    p_bar = ProgressBar(widgets=widgets, maxval=100).start()
-    counter = 0
+def reduce_noise(data, noise, progress=None):
     length = data.shape[0]
     tf = librosa.stft(data).T
     dest = []
     for frame in tf:
         dest.append([fa if np.abs(fa) > na else fa * 0.1
                      for na, fa in zip(noise, frame)])
-        counter = counter + 1
-        p_bar.update(counter / len(tf) * 100)
-    p_bar.finish()
+        if progress is not None:
+            progress(len(dest) / len(tf))
     dest = np.array(dest)
     return librosa.istft(dest.T, length=length)
 
@@ -91,11 +85,14 @@ def detect_reps(fnames, **kwargs):
     fname = fnames[0]
     data, rate = load_audio(fname, normalize=True)
 
-    for t1, t2, l in get_repetitions(data, rate, **kwargs):
-        print("repetition: {}--{} <=> {}--{}".format(timestr(t1),
-                                                     timestr(t1+l),
-                                                     timestr(t2),
-                                                     timestr(t2+l)))
+    with simple_progressbar(fname) as bar:
+        for t1, t2, l in get_repetitions(data, rate,
+                                         progress=bar.update,
+                                         **kwargs):
+            print("repetition: {}--{} <=> {}--{}".format(timestr(t1),
+                                                         timestr(t1+l),
+                                                         timestr(t2),
+                                                         timestr(t2+l)))
 
 
 def denoise(sample_fname, backup_suffix, fnames):
@@ -113,8 +110,8 @@ def denoise(sample_fname, backup_suffix, fnames):
         except FileNotFoundError:
             print("Error File {} not found!".format(fname), file=stderr)
             continue
-        print("Reducing noise from {}".format(fname))
-        res_data = reduce_noise(src_data, noise)
+        with simple_progressbar(fname) as bar:
+            res_data = reduce_noise(src_data, noise, bar.update)
         format_dot_place = fname.rfind(".", 0, len(fname))
         format_line = fname[format_dot_place + 1:] if (len(fname) > format_dot_place + 1) else ""
         if backup_suffix:

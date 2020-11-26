@@ -3,8 +3,11 @@ import numpy as np
 import sys
 import librosa
 
+from progress import subprogress
 
-def signal_windows_match_matrix_stft(signal, wsize, rate, hop_ratio=4):
+
+def signal_windows_match_matrix_stft(signal, wsize, rate, hop_ratio=4,
+                                     progress=None):
     n_fft = 1 << math.ceil(math.log2(wsize))
     hop = wsize // hop_ratio
     tf = np.abs(librosa.stft(signal,
@@ -17,17 +20,24 @@ def signal_windows_match_matrix_stft(signal, wsize, rate, hop_ratio=4):
     n = tf.shape[0]
     mtx = np.zeros([n, n])
 
+    c = 0
+    total = n * n // 2
+
     for i in range(n):
         for j in range(i + 1, n):
             d = np.sum((tf[i] - tf[j]) ** 2)
             mtx[i, j] = d
+            if progress is not None:
+                progress(c / total)
+                c += 1
 
     times = [librosa.frames_to_samples(i, hop_length=hop) / rate
              for i in range(tf.shape[0])]
     return mtx, times
 
 
-def walk_with_window(mtx, x, thresh, winlen, valthresh=math.inf):
+def walk_with_window(mtx, x, thresh, winlen, valthresh=math.inf,
+                     progress=None):
     wnd = np.empty(winlen)
     n = mtx.shape[0]
     end = n - x
@@ -39,6 +49,8 @@ def walk_with_window(mtx, x, thresh, winlen, valthresh=math.inf):
     s = np.sum(wnd)
 
     n_large = sum(x > valthresh for x in wnd)
+
+    total = end - winlen
 
     idx = 0
     for i in range(winlen, end):
@@ -52,6 +64,9 @@ def walk_with_window(mtx, x, thresh, winlen, valthresh=math.inf):
         if wnd[idx] > valthresh:
             n_large += 1
         idx = 0 if idx == winlen - 1 else (idx + 1)
+
+        if progress is not None:
+            progress(i / total)
 
     if s <= thresh_scaled and n_large == 0:
         yield end - winlen
@@ -72,14 +87,26 @@ def buffer_matches(it, dist_thresh):
         yield acc_start, acc_len
 
 
-def find_matches(mtx, thresh, win_length, dist_thresh, val_thresh):
+def find_matches(mtx, thresh, win_length, dist_thresh, val_thresh,
+                 progress=None):
     n = mtx.shape[0]
-    for x in range(win_length, n - win_length + 1):
+
+    c = 0
+    total = n * n // 2
+
+    high = n - win_length + 1
+    for x in range(win_length, high):
+        delta = n - x - win_length
+
         for i, l in buffer_matches(
-                walk_with_window(mtx, x, thresh,
-                                 win_length, val_thresh),
+                walk_with_window(
+                    mtx, x, thresh,
+                    win_length, val_thresh,
+                    subprogress(progress, c/total, delta/total)),
                 dist_thresh):
             yield i, x+i, l + win_length
+
+        c += delta
 
 
 def filter_by_length(it, min_length):
@@ -141,12 +168,14 @@ def get_repetitions(data, rate,
                     merge_distance_threshold=0.5,
                     min_final_length=2,
                     val_threshold_k=1.5,
-                    max_near_distance=0.5):
+                    max_near_distance=0.5,
+                    progress=None):
 
     frame_sz = round(frame_length * rate)
 
     mtx, times = signal_windows_match_matrix_stft(
-        data, frame_sz, rate, hop_ratio)
+        data, frame_sz, rate, hop_ratio,
+        subprogress(progress, 0, 1/2))
 
     frames = lambda sec: round(sec / frame_length * hop_ratio)
     seconds = lambda idx: times[idx]
@@ -162,7 +191,8 @@ def get_repetitions(data, rate,
                         mtx, threshold,
                         frames(window_size),
                         frames(merge_distance_threshold),
-                        threshold * val_threshold_k),
+                        threshold * val_threshold_k,
+                        subprogress(progress, 1/2, 1/2)),
                     frames(min_final_length))),
             frames(max_near_distance)):
         yield seconds(mt1), seconds(mt2), seconds(mlen)
