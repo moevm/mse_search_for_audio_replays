@@ -61,12 +61,37 @@ def reduce_noise(data, rate, noise, frame_length=0.05):
     tf = librosa.stft(data,
                       n_fft=n_fft,
                       win_length=frame_samples).T
+
+    def f(fa, na, p):
+        afa = np.abs(fa)
+        if afa > na and p > na:
+            return fa
+        else:
+            return 0
+
     dest = []
+
+    N = 8
+    prev = np.zeros(tf.shape[1], dtype=np.float32)
+    prevs = [None] * N
+    i = 0
+
     for frame in tf:
-        dest.append([fa if np.abs(fa) > na else 0
-                     for na, fa in zip(noise, frame)])
+        row = [f(fa, na, p)
+               for fa, na, p in zip(frame, noise, prev / N)]
+
+        curr = np.abs(frame)
+        if prevs[i] is not None:
+            prev -= prevs[i]
+        prevs[i] = curr
+        prev += curr
+        i = (i + 1) % N
+
+        dest.append(row)
+
         counter = counter + 1
         p_bar.update(counter / len(tf) * 100)
+
     p_bar.finish()
 
     dest_arr = np.array(dest).T
