@@ -128,15 +128,15 @@ def detect_reps(fnames, **kwargs):
         return 1
     fname = fnames[0]
     data, rate = load_audio(fname, normalize=True)
-
     with simple_progressbar(fname) as bar:
         for t1, t2, l in get_repetitions(data, rate,
                                          progress=bar.update,
                                          **kwargs):
+            
             print("repetition: {}--{} <=> {}--{}".format(timestr(t1),
                                                          timestr(t1+l),
                                                          timestr(t2),
-                                                         timestr(t2+l)))
+                                                         timestr(t2+l)))                          
 
 
 def denoise(sample_fname, backup_suffix, fnames):
