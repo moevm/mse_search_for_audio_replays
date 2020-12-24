@@ -162,7 +162,7 @@ def filter_near(it, max_distance):
 
 
 def mk_tfs_to_timestamp(tfs, seconds):
-    lenghts = [tf.shape[0] for tf in tfs]
+    lengths = [tf.shape[0] for tf in tfs]
 
     def f(frames):
         for i, l in enumerate(lengths):
@@ -193,8 +193,8 @@ def get_repetitions(signals, rate,
     mtx = stft_to_distmtx(tf, subprogress(progress, 0, 1/2))
 
     frames = lambda sec: round(sec / hop_secs)
-    seconds = lambda frames: frame * hop_secs
-    rev = mk_tfs_to_timestamp(fts, seconds)
+    seconds = lambda frames: frames * hop_secs
+    rev = mk_tfs_to_timestamp(tfs, seconds)
 
     # adjust the magic number together with threshold_k
     threshold = 62.5e-6 * frame_samps * threshold_k

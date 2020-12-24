@@ -1,3 +1,5 @@
+import numpy as np
+
 from pydub import AudioSegment
 import soundfile
 import librosa

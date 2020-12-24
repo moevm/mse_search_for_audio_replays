@@ -91,7 +91,7 @@ def detect_reps(fnames, **kwargs):
         for fname in fnames
     )
 
-    with simple_progressbar(fname) as bar:
+    with simple_progressbar('Detecting repetitions') as bar:
         for t1, t2, l in get_repetitions(signals, rate,
                                          progress=bar.update,
                                          **kwargs):
