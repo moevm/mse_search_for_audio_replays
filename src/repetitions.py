@@ -25,16 +25,11 @@ def stft_to_distmtx(tf, progress=None):
     n = tf.shape[0]
     mtx = np.zeros([n, n])
 
-    c = 0
-    total = n * n // 2
-
     for i in range(n):
-        for j in range(i + 1, n):
-            d = np.sum((tf[i] - tf[j]) ** 2)
-            mtx[i, j] = d
-            if progress is not None:
-                progress(c / total)
-                c += 1
+        row = np.sum((tf[i] - tf) ** 2, axis=1)
+        mtx[i] = row
+        if progress is not None:
+            progress(i / n)
 
     return mtx
 
