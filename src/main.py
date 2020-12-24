@@ -143,7 +143,7 @@ def main_denoise(args):
 
 
 def main_reps(args):
-    return detect_reps([args.file],
+    return detect_reps(args.files,
                        frame_length=args.frame_length,
                        threshold_k=args.threshold,
                        window_size=args.window_length,
@@ -167,8 +167,8 @@ def main(argv):
         help="detect repetitions in specified file")
 
     p_reps.add_argument(
-        "file", metavar="FILE", type=str,
-        help="audio file to detect repetitions in")
+        "files", metavar="FILE", type=str, nargs="+",
+        help="audio files to detect repetitions in")
     p_reps.add_argument(
         "-l", "--min-length", metavar="SEC", type=float, default=2.0,
         help="minimal length of a repetition in seconds")
