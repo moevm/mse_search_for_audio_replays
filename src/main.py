@@ -162,14 +162,15 @@ def denoise(sample_fname, backup_suffix, fnames):
                 noise = noise_spec(samp, src_rate)
                 noise_tab[src_rate] = noise
 
-            res_data = reduce_noise(src_data, src_rate, noise, progress=bar.update)
-        format_dot_place = fname.rfind(".", 0, len(fname))
-        format_line = fname[format_dot_place + 1:] if (len(fname) > format_dot_place + 1) else ""
+            res_data = reduce_noise(src_data, src_rate, noise,
+                                    progress=bar.update)
+
+        base, ext = os.path.splitext(fname)
         if backup_suffix:
             if format_dot_place == -1:
                 os.rename(fname, fname + backup_suffix)
             else:
-                os.rename(fname, fname[:format_dot_place] + backup_suffix + '.' + format_line)
+                os.rename(fname, base + backup_suffix + ext)
         export_audio(fname, res_data, src_rate)
 
     return 0
