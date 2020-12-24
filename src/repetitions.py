@@ -1,4 +1,6 @@
 import math
+from itertools import chain
+
 import numpy as np
 import sys
 import librosa
@@ -112,6 +114,7 @@ def find_matches(mtx, thresh, win_length, dist_thresh, val_thresh,
                                          c / total,
                                          delta / total)),
                 dist_thresh):
+
             yield i, x+i, l + win_length, d
 
         c += delta
@@ -190,9 +193,32 @@ def mk_filter_dist(max_d):
     return f
 
 
-def mk_tfs_to_timestamp(tfs, seconds):
-    lengths = [tf.shape[0] for tf in tfs]
+def maybe_split(lengths, t1, t2, l):
+    end = t1 + l
 
+    dt = 0
+    for dl in sorted(t0 - t1 for t0 in
+                     chain(lengths, (l - t2 + t1 for l in lengths))
+                     if t1 < t0 < end):
+        if dl == dt:
+            continue
+        yield t1+dt, t2+dt, dl-dt
+        dt = dl
+
+    if dt < l:
+        yield t1+dt, t2+dt, l-dt
+
+
+def mk_filter_multitrack(lengths):
+    def f(it):
+        for t1, t2, l, d in it:
+            yield from ((t1, t2, l, d)
+                        for t1, t2, l
+                        in maybe_split(lengths, t1, t2, l))
+    return f
+
+
+def mk_tfs_to_timestamp(lengths, seconds):
     def f(frames):
         for i, l in enumerate(lengths):
             if frames < l:
@@ -225,11 +251,12 @@ def get_repetitions(signals, rate,
 
     tfs = [signal_stft(s, frame_samps, hop_samps) for s in signals]
     tf = np.concatenate(tfs, axis=0)
+    lengths = [tf.shape[0] for tf in tfs]
     mtx = stft_to_distmtx(tf, subprogress(progress, 0, 1/2))
 
     frames = lambda sec: round(sec / hop_secs)
     seconds = lambda frames: frames * hop_secs
-    rev = mk_tfs_to_timestamp(tfs, seconds)
+    rev = mk_tfs_to_timestamp(lengths, seconds)
 
     # adjust the magic number together with threshold_k
     threshold = 62.5e-6 * frame_samps * threshold_k
@@ -244,7 +271,8 @@ def get_repetitions(signals, rate,
             mk_filter_by_length(frames(min_final_length)),
             filter_self_overlapping,
             mk_filter_near(frames(max_near_distance)),
-            mk_filter_dist(threshold)):
+            mk_filter_dist(threshold),
+            mk_filter_multitrack(lengths)):
 
         i1, t1 = rev(mt1)
         i2, t2 = rev(mt2)
