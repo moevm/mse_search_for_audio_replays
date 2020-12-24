@@ -3,7 +3,7 @@ import numpy as np
 import sys
 import librosa
 
-from progress import subprogress
+from .progress import subprogress
 
 
 def signal_windows_match_matrix_stft(signal, wsize, rate, hop_ratio=4,

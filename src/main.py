@@ -10,8 +10,8 @@ from pydub import AudioSegment
 import librosa
 import soundfile
 
-from progress import simple_progressbar
-from repetitions import get_repetitions
+from .progress import simple_progressbar
+from .repetitions import get_repetitions
 
 
 def next_pow2(x):
@@ -192,6 +192,7 @@ def main_reps(args):
 
 
 def main(argv):
+    print(argv)
     p = argparse.ArgumentParser(
         description='Performs noise reduction and searches for repetitions in audio files.')
 
