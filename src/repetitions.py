@@ -272,8 +272,9 @@ def get_repetitions(signals, rate,
             filter_self_overlapping,
             mk_filter_near(frames(max_near_distance)),
             mk_filter_dist(threshold),
-            mk_filter_multitrack(lengths)):
-
+            mk_filter_multitrack(lengths),
+            mk_filter_by_length(frames(min_final_length)),
+    ):
         i1, t1 = rev(mt1)
         i2, t2 = rev(mt2)
         l = seconds(mlen)
