@@ -86,20 +86,20 @@ def detect_reps(fnames, **kwargs):
         return "{:02d}:{:02d}:{:02d}.{:03d}".format(
             hours, minutes_only, seconds_only, mseconds_only)
 
-    if len(fnames) != 1:
-        print("Cannot detect repetitions across files yet")
-        return 1
-    fname = fnames[0]
-    data, rate = load_audio(fname, normalize=True)
+    signals, rate = resample_to_common(
+        load_audio(fname, normalize=True)
+        for fname in fnames
+    )
 
     with simple_progressbar(fname) as bar:
-        for t1, t2, l in get_repetitions(data, rate,
+        for t1, t2, l in get_repetitions(signals, rate,
                                          progress=bar.update,
                                          **kwargs):
-            print("repetition: {}--{} <=> {}--{}".format(timestr(t1),
-                                                         timestr(t1+l),
-                                                         timestr(t2),
-                                                         timestr(t2+l)))
+            i1, tt1 = t1
+            i2, tt2 = t2
+            print("repetition: {} {}--{} <=> {} {}--{}"
+                  .format(fnames[i1], timestr(tt1), timestr(tt1+l),
+                          fnames[i2], timestr(tt2), timestr(tt2+l)))
 
 
 def denoise(sample_fname, backup_suffix, fnames):

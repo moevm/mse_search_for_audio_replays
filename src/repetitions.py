@@ -6,10 +6,9 @@ import librosa
 from progress import subprogress
 
 
-def signal_windows_match_matrix_stft(signal, wsize, rate, hop_ratio=4,
-                                     progress=None):
+# note: wsize and hop are in samples
+def signal_stft(signal, wsize, hop):
     n_fft = 1 << math.ceil(math.log2(wsize))
-    hop = wsize // hop_ratio
     tf = np.abs(librosa.stft(signal,
                              n_fft,
                              win_length=wsize,
@@ -17,6 +16,10 @@ def signal_windows_match_matrix_stft(signal, wsize, rate, hop_ratio=4,
 
     tf /= np.amax(tf)
 
+    return tf
+
+
+def stft_to_distmtx(tf, progress=None):
     n = tf.shape[0]
     mtx = np.zeros([n, n])
 
@@ -158,7 +161,19 @@ def filter_near(it, max_distance):
         yield bmin, xmin + bmin, l
 
 
-def get_repetitions(data, rate,
+def mk_tfs_to_timestamp(tfs, seconds):
+    lenghts = [tf.shape[0] for tf in tfs]
+
+    def f(frames):
+        for i, l in enumerate(lengths):
+            if frames < l:
+                return i, seconds(frames)
+            else:
+                frames -= l
+    return f
+
+
+def get_repetitions(signals, rate,
                     frame_length=0.05,
                     threshold_k=3,
                     hop_ratio=4,
@@ -169,17 +184,20 @@ def get_repetitions(data, rate,
                     max_near_distance=0.5,
                     progress=None):
 
-    frame_sz = round(frame_length * rate)
+    frame_samps = round(frame_length * rate)
+    hop_secs = frame_length / hop_ratio
+    hop_samps = frame_samps // hop_ratio
 
-    mtx = signal_windows_match_matrix_stft(
-        data, frame_sz, rate, hop_ratio,
-        subprogress(progress, 0, 1/2))
+    tfs = [signal_stft(s, frame_samps, hop_samps) for s in signals]
+    tf = np.concatenate(tfs, axis=0)
+    mtx = stft_to_distmtx(tf, subprogress(progress, 0, 1/2))
 
-    frames = lambda sec: round(sec / frame_length * hop_ratio)
-    seconds = lambda frame: frame * frame_length / hop_ratio
+    frames = lambda sec: round(sec / hop_secs)
+    seconds = lambda frames: frame * hop_secs
+    rev = mk_tfs_to_timestamp(fts, seconds)
 
     # adjust the magic number together with threshold_k
-    threshold = 62.5e-6 * frame_sz * threshold_k
+    threshold = 62.5e-6 * frame_samps * threshold_k
 
     for mt1, mt2, mlen in \
         filter_near(
@@ -193,4 +211,4 @@ def get_repetitions(data, rate,
                         subprogress(progress, 1/2, 1/2)),
                     frames(min_final_length))),
             frames(max_near_distance)):
-        yield seconds(mt1), seconds(mt2), seconds(mlen)
+        yield rev(mt1), rev(mt2), seconds(mlen)
