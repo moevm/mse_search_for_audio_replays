@@ -37,13 +37,12 @@ def stft_to_distmtx(tf, progress=None):
     return mtx
 
 
-def walk_with_window(mtx, x, thresh, winlen, valthresh=math.inf,
+def walk_with_window(mtx, x, thresh, winlen, valthresh=0,
+                     k_thresh=1.0,
                      progress=None):
     wnd = np.empty(winlen)
     n = mtx.shape[0]
     end = n - x
-
-    thresh_scaled = thresh * winlen
 
     for i in range(winlen):
         wnd[i] = mtx[i, x+i]
@@ -55,8 +54,10 @@ def walk_with_window(mtx, x, thresh, winlen, valthresh=math.inf,
 
     idx = 0
     for i in range(winlen, end):
-        if s <= thresh_scaled and n_large == 0:
-            yield i - winlen
+        k = s / winlen / thresh
+        if k <= k_thresh and n_large == 0:
+            yield i - winlen, k
+
         s -= wnd[idx]
         if wnd[idx] > valthresh:
             n_large -= 1
@@ -69,23 +70,26 @@ def walk_with_window(mtx, x, thresh, winlen, valthresh=math.inf,
         if progress is not None:
             progress(i / total)
 
-    if s <= thresh_scaled and n_large == 0:
-        yield end - winlen
+    k = s / winlen / thresh
+    if k <= k_thresh and n_large == 0:
+        yield end - winlen, k
 
 
 def buffer_matches(it, dist_thresh):
-    acc_start = acc_len = None
-    for i in it:
+    acc_start = acc_len = sd = None
+    for i, d in it:
         if (acc_start is not None
-            and i - acc_start <= acc_len + dist_thresh):
-            acc_len = i - acc_start
+            and i - acc_start + 1 <= acc_len + dist_thresh):
+            acc_len = i - acc_start + 1
+            sd += d
         else:
             if acc_start is not None:
-                yield acc_start, acc_len
-            acc_len = 0
+                yield acc_start, acc_len, sd / acc_len
+            acc_len = 1
             acc_start = i
+            sd = d
     if acc_start is not None:
-        yield acc_start, acc_len
+        yield acc_start, acc_len, sd / acc_len
 
 
 def find_matches(mtx, thresh, win_length, dist_thresh, val_thresh,
@@ -99,36 +103,53 @@ def find_matches(mtx, thresh, win_length, dist_thresh, val_thresh,
     for x in range(win_length, high):
         delta = n - x - win_length
 
-        for i, l in buffer_matches(
+        for i, l, d in buffer_matches(
                 walk_with_window(
                     mtx, x, thresh,
-                    win_length, val_thresh,
-                    subprogress(progress, c/total, delta/total)),
+                    win_length,
+                    valthresh=val_thresh,
+                    progress=subprogress(progress,
+                                         c / total,
+                                         delta / total)),
                 dist_thresh):
-            yield i, x+i, l + win_length
+            yield i, x+i, l + win_length, d
 
         c += delta
 
 
 def mk_filter_by_length(min_length):
     def f(it):
-        for t1, t2, l in it:
+        for t1, t2, l, d in it:
             if l >= min_length:
-                yield t1, t2, l
+                yield t1, t2, l, d
     return f
 
 
 def filter_self_overlapping(it):
-    for t1, t2, l in it:
+    for t1, t2, l, d in it:
         if t1 + l <= t2:
-            yield t1, t2, l
+            yield t1, t2, l, d
+
+
+def merge_matches(ms):
+    t1_min = min(t1 for t1, t2, l, d in ms)
+    t2_min = min(t2 - t1 for t1, t2, l, d in ms)
+    t1_max = max(t1 + l for t1, t2, l, d in ms)
+
+    l = t1_max - t1_min
+
+    l_total = sum(ln[2] for ln in ms)
+    d = sum(d * l / l_total
+            for t1, t2, l, d in ms)
+
+    return t1_min, t1_min + t2_min, l, d
 
 
 def mk_filter_near(max_distance):
     def f(it):
         def lines_near(ln1, ln2):
-            y1, x1, l1 = ln1
-            y2, x2, l2 = ln2
+            y1, x1, l1, d1 = ln1
+            y2, x2, l2, d2 = ln2
             dx = abs((x1 - y1) - (x2 - y2))
             if dx > max_distance:
                 return False
@@ -156,12 +177,16 @@ def mk_filter_near(max_distance):
             bins.append(nbin)
 
         for b in bins:
-            bmin = min(ln[0] for ln in b)
-            xmin = min(ln[1] for ln in b)
-            emax = max(ln[0]+ln[2] for ln in b)
-            x2max = max(ln[1]+ln[2] for ln in b)
-            l = min(x2max - xmin, emax - bmin)
-            yield bmin, xmin + bmin, l
+            yield merge_matches(b)
+
+    return f
+
+
+def mk_filter_dist(max_d):
+    def f(it):
+        for t1, t2, l, d in it:
+            if d <= max_d:
+                yield t1, t2, l, d
     return f
 
 
@@ -209,7 +234,7 @@ def get_repetitions(signals, rate,
     # adjust the magic number together with threshold_k
     threshold = 62.5e-6 * frame_samps * threshold_k
 
-    for mt1, mt2, mlen in multifilter(
+    for mt1, mt2, mlen, mdist in multifilter(
             find_matches(
                 mtx, threshold,
                 frames(window_size),
@@ -218,9 +243,12 @@ def get_repetitions(signals, rate,
                 subprogress(progress, 1/2, 1/2)),
             mk_filter_by_length(frames(min_final_length)),
             filter_self_overlapping,
-            mk_filter_near(frames(max_near_distance))):
+            mk_filter_near(frames(max_near_distance)),
+            mk_filter_dist(threshold)):
+
         i1, t1 = rev(mt1)
         i2, t2 = rev(mt2)
         l = seconds(mlen)
+        prob = (threshold - mdist) / threshold
 
-        yield (i1, t1), (i2, t2), l
+        yield (i1, t1), (i2, t2), l, prob
