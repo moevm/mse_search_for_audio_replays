@@ -110,10 +110,12 @@ def find_matches(mtx, thresh, win_length, dist_thresh, val_thresh,
         c += delta
 
 
-def filter_by_length(it, min_length):
-    for t1, t2, l in it:
-        if l >= min_length:
-            yield t1, t2, l
+def mk_filter_by_length(min_length):
+    def f(it):
+        for t1, t2, l in it:
+            if l >= min_length:
+                yield t1, t2, l
+    return f
 
 
 def filter_self_overlapping(it):
@@ -122,43 +124,45 @@ def filter_self_overlapping(it):
             yield t1, t2, l
 
 
-def filter_near(it, max_distance):
-    def lines_near(ln1, ln2):
-        y1, x1, l1 = ln1
-        y2, x2, l2 = ln2
-        dx = abs((x1 - y1) - (x2 - y2))
-        if dx > max_distance:
-            return False
+def mk_filter_near(max_distance):
+    def f(it):
+        def lines_near(ln1, ln2):
+            y1, x1, l1 = ln1
+            y2, x2, l2 = ln2
+            dx = abs((x1 - y1) - (x2 - y2))
+            if dx > max_distance:
+                return False
 
-        bmax = max(y1, y2)
-        emin = min(y1+l1, y2+l2)
-        common = emin - bmax
-        if common < min(l1, l2) / 2:
-            return False
+            bmax = max(y1, y2)
+            emin = min(y1+l1, y2+l2)
+            common = emin - bmax
+            if common < min(l1, l2) / 2:
+                return False
 
-        return True
+            return True
 
-    bins = []
-    for line in it:
-        ch_bs = []
+        bins = []
+        for line in it:
+            ch_bs = []
+            for b in bins:
+                for l in b:
+                    if lines_near(line, l):
+                        ch_bs.append(b)
+                        break
+            nbin = [line]
+            for ch_b in ch_bs:
+                bins.remove(ch_b)
+                nbin.extend(ch_b)
+            bins.append(nbin)
+
         for b in bins:
-            for l in b:
-                if lines_near(line, l):
-                    ch_bs.append(b)
-                    break
-        nbin = [line]
-        for ch_b in ch_bs:
-            bins.remove(ch_b)
-            nbin.extend(ch_b)
-        bins.append(nbin)
-
-    for b in bins:
-        bmin = min(ln[0] for ln in b)
-        xmin = min(ln[1] for ln in b)
-        emax = max(ln[0]+ln[2] for ln in b)
-        x2max = max(ln[1]+ln[2] for ln in b)
-        l = min(x2max - xmin, emax - bmin)
-        yield bmin, xmin + bmin, l
+            bmin = min(ln[0] for ln in b)
+            xmin = min(ln[1] for ln in b)
+            emax = max(ln[0]+ln[2] for ln in b)
+            x2max = max(ln[1]+ln[2] for ln in b)
+            l = min(x2max - xmin, emax - bmin)
+            yield bmin, xmin + bmin, l
+    return f
 
 
 def mk_tfs_to_timestamp(tfs, seconds):
@@ -171,6 +175,12 @@ def mk_tfs_to_timestamp(tfs, seconds):
             else:
                 frames -= l
     return f
+
+
+def multifilter(source, *filters):
+    for f in filters:
+        source = f(source)
+    return source
 
 
 def get_repetitions(signals, rate,
@@ -199,16 +209,18 @@ def get_repetitions(signals, rate,
     # adjust the magic number together with threshold_k
     threshold = 62.5e-6 * frame_samps * threshold_k
 
-    for mt1, mt2, mlen in \
-        filter_near(
-            filter_self_overlapping(
-                filter_by_length(
-                    find_matches(
-                        mtx, threshold,
-                        frames(window_size),
-                        frames(merge_distance_threshold),
-                        threshold * val_threshold_k,
-                        subprogress(progress, 1/2, 1/2)),
-                    frames(min_final_length))),
-            frames(max_near_distance)):
-        yield rev(mt1), rev(mt2), seconds(mlen)
+    for mt1, mt2, mlen in multifilter(
+            find_matches(
+                mtx, threshold,
+                frames(window_size),
+                frames(merge_distance_threshold),
+                threshold * val_threshold_k,
+                subprogress(progress, 1/2, 1/2)),
+            mk_filter_by_length(frames(min_final_length)),
+            filter_self_overlapping,
+            mk_filter_near(frames(max_near_distance))):
+        i1, t1 = rev(mt1)
+        i2, t2 = rev(mt2)
+        l = seconds(mlen)
+
+        yield (i1, t1), (i2, t2), l
