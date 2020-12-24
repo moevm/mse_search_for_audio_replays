@@ -6,10 +6,9 @@ import os
 import math
 
 import numpy as np
-from pydub import AudioSegment
 import librosa
-import soundfile
 
+from audio import load_audio, export_audio, resample_to_common
 from progress import simple_progressbar
 from repetitions import get_repetitions
 
@@ -19,28 +18,6 @@ def next_pow2(x):
     while p2 < x:
         p2 <<= 1
     return p2
-
-
-# -> np.array (mono audio data), int (sampling rate)
-def load_audio(fname, normalize=False):
-    print("Loading file {}...".format(fname), end="")
-    af = AudioSegment.from_file(fname)
-    data = np.array([chan.get_array_of_samples()
-                     for chan in af.split_to_mono()],
-                    dtype=np.float32)
-    rate = af.frame_rate
-    channels = data.shape[0]
-
-    if channels > 1:
-        data = np.mean(data, axis=0)
-    else:
-        data = data[0]
-
-    if normalize:
-        data = data / np.amax(data)
-
-    print("OK")
-    return data, rate
 
 
 def noise_spec(noise_data, rate, frame_length=0.05):
@@ -97,20 +74,6 @@ def reduce_noise(data, rate, noise, frame_length=0.05, progress=None):
                          length=data.shape[0])
 
 
-def export_audio(fname, data, rate):
-    try:
-        soundfile.write(fname, np.asarray(data, np.int16), rate)
-    except TypeError:
-        File = os.path.splitext(fname)
-        fname = File[0] + ".wav"
-        soundfile.write(fname, np.asarray(data, np.int16), rate)
-
-        if File[1] == ".mp3":
-            fnamemp3 = File[0] + ".mp3"
-            AudioSegment.from_wav(fname).export(fnamemp3, format="mp3")
-            os.remove(fname)
-
-
 def detect_reps(fnames, **kwargs):
     def timestr(seconds_fp):
         mseconds = round(seconds_fp * 1e3)
@@ -123,21 +86,20 @@ def detect_reps(fnames, **kwargs):
         return "{:02d}:{:02d}:{:02d}.{:03d}".format(
             hours, minutes_only, seconds_only, mseconds_only)
 
-    if len(fnames) != 1:
-        print("Cannot detect repetitions across files yet")
-        return 1
-    fname = fnames[0]
-    data, rate = load_audio(fname, normalize=True)
-    with simple_progressbar(fname) as bar:
-        for t1, t2, l in get_repetitions(data, rate,
+    signals, rate = resample_to_common(
+        load_audio(fname, normalize=True)
+        for fname in fnames
+    )
+
+    with simple_progressbar('Detecting repetitions') as bar:
+        for t1, t2, l in get_repetitions(signals, rate,
                                          progress=bar.update,
                                          **kwargs):
-            
-            print("repetition: {}--{} <=> {}--{}".format(timestr(t1),
-                                                         timestr(t1+l),
-                                                         timestr(t2),
-                                                         timestr(t2+l)))                          
-
+            i1, tt1 = t1
+            i2, tt2 = t2
+            print("repetition: {} {}--{} <=> {} {}--{}"
+                  .format(fnames[i1], timestr(tt1), timestr(tt1+l),
+                          fnames[i2], timestr(tt2), timestr(tt2+l)))
 
 def denoise(sample_fname, backup_suffix, fnames):
     if sample_fname is None:
