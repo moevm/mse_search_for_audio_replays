@@ -92,14 +92,17 @@ def detect_reps(fnames, **kwargs):
     )
 
     with simple_progressbar('Detecting repetitions') as bar:
-        for t1, t2, l in get_repetitions(signals, rate,
-                                         progress=bar.update,
-                                         **kwargs):
+        for t1, t2, l, p in get_repetitions(signals, rate,
+                                            progress=bar.update,
+                                            **kwargs):
             i1, tt1 = t1
             i2, tt2 = t2
-            print("repetition: {} {}--{} <=> {} {}--{}"
-                  .format(fnames[i1], timestr(tt1), timestr(tt1+l),
-                          fnames[i2], timestr(tt2), timestr(tt2+l)))
+            percent = 100 * p
+            print(
+                "repetition: {}[{}] {}--{} <=> {}[{}] {}--{} ({:.1f}%)"
+                .format(fnames[i1], i1+1, timestr(tt1), timestr(tt1+l),
+                        fnames[i2], i2+1, timestr(tt2), timestr(tt2+l),
+                        percent))
 
 def denoise(sample_fname, backup_suffix, fnames):
     if sample_fname is None:
