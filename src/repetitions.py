@@ -127,6 +127,8 @@ def filter_self_overlapping(it):
     for t1, t2, l, d in it:
         if t1 + l <= t2:
             yield t1, t2, l, d
+        else:
+            yield t1, t2, t2 - t1, d
 
 
 def merge_matches(ms):
@@ -266,6 +268,7 @@ def get_repetitions(signals, rate,
             mk_filter_by_length(frames(min_final_length)),
             filter_self_overlapping,
             mk_filter_near(frames(max_near_distance)),
+            filter_self_overlapping,
             mk_filter_dist(threshold),
             mk_filter_multitrack(lengths),
             mk_filter_by_length(frames(min_final_length)),
