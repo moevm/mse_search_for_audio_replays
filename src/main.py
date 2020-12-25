@@ -6,10 +6,9 @@ import os
 import math
 
 import numpy as np
-from pydub import AudioSegment
 import librosa
-import soundfile
 
+from audio import load_audio, export_audio, resample_to_common
 from progress import simple_progressbar
 from repetitions import get_repetitions
 
@@ -19,28 +18,6 @@ def next_pow2(x):
     while p2 < x:
         p2 <<= 1
     return p2
-
-
-# -> np.array (mono audio data), int (sampling rate)
-def load_audio(fname, normalize=False):
-    print("Loading file {}...".format(fname), end="")
-    af = AudioSegment.from_file(fname)
-    data = np.array([chan.get_array_of_samples()
-                     for chan in af.split_to_mono()],
-                    dtype=np.float32)
-    rate = af.frame_rate
-    channels = data.shape[0]
-
-    if channels > 1:
-        data = np.mean(data, axis=0)
-    else:
-        data = data[0]
-
-    if normalize:
-        data = data / np.amax(data)
-
-    print("OK")
-    return data, rate
 
 
 def noise_spec(noise_data, rate, frame_length=0.05):
@@ -97,20 +74,6 @@ def reduce_noise(data, rate, noise, frame_length=0.05, progress=None):
                          length=data.shape[0])
 
 
-def export_audio(fname, data, rate):
-    try:
-        soundfile.write(fname, np.asarray(data, np.int16), rate)
-    except TypeError:
-        File = os.path.splitext(fname)
-        fname = File[0] + ".wav"
-        soundfile.write(fname, np.asarray(data, np.int16), rate)
-
-        if File[1] == ".mp3":
-            fnamemp3 = File[0] + ".mp3"
-            AudioSegment.from_wav(fname).export(fnamemp3, format="mp3")
-            os.remove(fname)
-
-
 def detect_reps(fnames, **kwargs):
     def timestr(seconds_fp):
         mseconds = round(seconds_fp * 1e3)
@@ -123,21 +86,23 @@ def detect_reps(fnames, **kwargs):
         return "{:02d}:{:02d}:{:02d}.{:03d}".format(
             hours, minutes_only, seconds_only, mseconds_only)
 
-    if len(fnames) != 1:
-        print("Cannot detect repetitions across files yet")
-        return 1
-    fname = fnames[0]
-    data, rate = load_audio(fname, normalize=True)
+    signals, rate = resample_to_common(
+        load_audio(fname, normalize=True)
+        for fname in fnames
+    )
 
-    with simple_progressbar(fname) as bar:
-        for t1, t2, l in get_repetitions(data, rate,
-                                         progress=bar.update,
-                                         **kwargs):
-            print("repetition: {}--{} <=> {}--{}".format(timestr(t1),
-                                                         timestr(t1+l),
-                                                         timestr(t2),
-                                                         timestr(t2+l)))
-
+    with simple_progressbar('Detecting repetitions') as bar:
+        for t1, t2, l, p in get_repetitions(signals, rate,
+                                            progress=bar.update,
+                                            **kwargs):
+            i1, tt1 = t1
+            i2, tt2 = t2
+            percent = 100 * p
+            print(
+                "repetition: {}[{}] {}--{} <=> {}[{}] {}--{} ({:.1f}%)"
+                .format(fnames[i1], i1+1, timestr(tt1), timestr(tt1+l),
+                        fnames[i2], i2+1, timestr(tt2), timestr(tt2+l),
+                        percent))
 
 def denoise(sample_fname, backup_suffix, fnames):
     if sample_fname is None:
@@ -182,7 +147,7 @@ def main_denoise(args):
 
 
 def main_reps(args):
-    return detect_reps([args.file],
+    return detect_reps(args.files,
                        frame_length=args.frame_length,
                        threshold_k=args.threshold,
                        window_size=args.window_length,
@@ -206,19 +171,19 @@ def main(argv):
         help="detect repetitions in specified file")
 
     p_reps.add_argument(
-        "file", metavar="FILE", type=str,
-        help="audio file to detect repetitions in")
+        "files", metavar="FILE", type=str, nargs="+",
+        help="audio files to detect repetitions in")
     p_reps.add_argument(
         "-l", "--min-length", metavar="SEC", type=float, default=2.0,
         help="minimal length of a repetition in seconds")
     p_reps.add_argument(
-        "-f", "--frame-length", metavar="SEC", type=float, default=0.05,
+        "-f", "--frame-length", metavar="SEC", type=float, default=1.0,
         help="length of STFT frame in seconds")
     p_reps.add_argument(
-        "-t", "--threshold", metavar="K", type=float, default=3,
+        "-t", "--threshold", metavar="K", type=float, default=0.25,
         help="comparison threshold (no dimension; lower for stricter comparisons)")
     p_reps.add_argument(
-        "--window-length", metavar="SEC", type=float, default=0.5,
+        "--window-length", metavar="SEC", type=float, default=1.0,
         help="length of comparison window in seconds")
     p_reps.add_argument(
         "--merge-threshold", metavar="SEC", type=float, default=0.5,
