@@ -176,13 +176,13 @@ def main(argv):
         "-l", "--min-length", metavar="SEC", type=float, default=2.0,
         help="minimal length of a repetition in seconds")
     p_reps.add_argument(
-        "-f", "--frame-length", metavar="SEC", type=float, default=0.05,
+        "-f", "--frame-length", metavar="SEC", type=float, default=1.0,
         help="length of STFT frame in seconds")
     p_reps.add_argument(
-        "-t", "--threshold", metavar="K", type=float, default=3,
+        "-t", "--threshold", metavar="K", type=float, default=0.25,
         help="comparison threshold (no dimension; lower for stricter comparisons)")
     p_reps.add_argument(
-        "--window-length", metavar="SEC", type=float, default=0.5,
+        "--window-length", metavar="SEC", type=float, default=1.0,
         help="length of comparison window in seconds")
     p_reps.add_argument(
         "--merge-threshold", metavar="SEC", type=float, default=0.5,

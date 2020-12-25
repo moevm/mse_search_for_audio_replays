@@ -1,3 +1,6 @@
+from sys import stderr
+import os
+
 import numpy as np
 
 from pydub import AudioSegment
@@ -7,7 +10,7 @@ import librosa
 
 # -> np.array (mono audio data), int (sampling rate)
 def load_audio(fname, normalize=False):
-    print("Loading file {}...".format(fname), end="")
+    print("Loading file {}...".format(fname), end="", file=stderr)
     af = AudioSegment.from_file(fname)
     data = np.array([chan.get_array_of_samples()
                      for chan in af.split_to_mono()],
@@ -23,7 +26,7 @@ def load_audio(fname, normalize=False):
     if normalize:
         data = data / np.amax(data)
 
-    print("OK")
+    print("OK", file=stderr)
     return data, rate
 
 

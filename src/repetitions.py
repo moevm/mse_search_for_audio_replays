@@ -25,16 +25,11 @@ def stft_to_distmtx(tf, progress=None):
     n = tf.shape[0]
     mtx = np.zeros([n, n])
 
-    c = 0
-    total = n * n // 2
-
     for i in range(n):
-        for j in range(i + 1, n):
-            d = np.sum((tf[i] - tf[j]) ** 2)
-            mtx[i, j] = d
-            if progress is not None:
-                progress(c / total)
-                c += 1
+        row = np.sum((tf[i] - tf) ** 2, axis=1)
+        mtx[i] = row
+        if progress is not None:
+            progress(i / n)
 
     return mtx
 
@@ -132,6 +127,8 @@ def filter_self_overlapping(it):
     for t1, t2, l, d in it:
         if t1 + l <= t2:
             yield t1, t2, l, d
+        else:
+            yield t1, t2, t2 - t1, d
 
 
 def merge_matches(ms):
@@ -271,6 +268,7 @@ def get_repetitions(signals, rate,
             mk_filter_by_length(frames(min_final_length)),
             filter_self_overlapping,
             mk_filter_near(frames(max_near_distance)),
+            filter_self_overlapping,
             mk_filter_dist(threshold),
             mk_filter_multitrack(lengths),
             mk_filter_by_length(frames(min_final_length)),
