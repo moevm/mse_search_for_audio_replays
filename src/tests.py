@@ -15,7 +15,6 @@ def comparison(output, answer):
 	if len(ans) > len(out):
 		return 0
 	for i in range(len(ans)):
-		#print("in FOR FIRST")
 		newLineAns = ans[i].split(' ')
 		#print(newLineAns)
 		
@@ -40,8 +39,7 @@ def comparison(output, answer):
 		
 		
 		for j in range(len(out)):
-			#print("in FOR SEC")
-			newLineOut = out[i].split(' ')
+			newLineOut = out[j].split(' ')
 			#print(newLineOut)
 			if newLineOut[1] == newLineAns[1] and newLineOut[4] == newLineAns[4]:
 				k = 0
@@ -185,6 +183,6 @@ for test in tests:
 			if verdict:
 				print("TEST PASSED")
 			else:
-				print("TEST FAILD")
+				print("TEST FAILED")
 		os.chdir(path)
 	
